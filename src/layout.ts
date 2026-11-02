@@ -1,0 +1,225 @@
+import { lifeSpan, type GedcomData } from './gedcom';
+
+export interface TreeSource {
+  id: string;
+  label: string;
+  sublabel?: string;
+  kind?: string;
+  children: TreeSource[];
+}
+
+export interface Box {
+  id: string;
+  label: string;
+  sublabel?: string;
+  kind?: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface Link {
+  from: string;
+  to: string;
+}
+
+export interface Chart {
+  boxes: Box[];
+  links: Link[];
+  width: number;
+  height: number;
+  horizontal: boolean;
+}
+
+export type Orientation = 'top-down' | 'left-right' | 'right-left' | 'bottom-up';
+
+export interface LayoutOptions {
+  orientation?: Orientation;
+  boxW?: number;
+  boxH?: number;
+  gapX?: number;
+  gapY?: number;
+}
+
+// Tidy tree: leaves take consecutive slots, each parent is centered over its children.
+export function layoutTree(root: TreeSource, opts: LayoutOptions = {}): Chart {
+  const { orientation = 'top-down', boxW = 160, boxH = 56, gapX = 24, gapY = 48 } = opts;
+  const horizontal = orientation === 'left-right' || orientation === 'right-left';
+  const reversed = orientation === 'bottom-up' || orientation === 'right-left';
+  const slot = horizontal ? boxH + gapX : boxW + gapX; // between siblings
+  const level = horizontal ? boxW + gapY : boxH + gapY; // between generations
+  const levelSize = horizontal ? boxW : boxH;
+
+  const placed: { n: TreeSource; sib: number; depth: number }[] = [];
+  const links: Link[] = [];
+  const seen = new Set<string>();
+  let next = 0;
+  let maxDepth = 0;
+
+  const place = (n: TreeSource, depth: number): number => {
+    seen.add(n.id);
+    maxDepth = Math.max(maxDepth, depth);
+    const kids = n.children.filter((c) => !seen.has(c.id));
+    const centers = kids.map((c) => place(c, depth + 1));
+    const sib = centers.length ? (centers[0] + centers[centers.length - 1]) / 2 : next++ * slot;
+    for (const c of kids) links.push({ from: n.id, to: c.id });
+    placed.push({ n, sib, depth });
+    return sib;
+  };
+  place(root, 0);
+
+  const sibSpan = Math.max(1, next) * slot - gapX;
+  const levSpan = maxDepth * level + levelSize;
+  const boxes: Box[] = placed.map(({ n, sib, depth }) => {
+    const lev = reversed ? maxDepth * level - depth * level : depth * level;
+    return {
+      id: n.id,
+      label: n.label,
+      sublabel: n.sublabel,
+      kind: n.kind,
+      x: horizontal ? lev : sib,
+      y: horizontal ? sib : lev,
+      w: boxW,
+      h: boxH,
+    };
+  });
+  return { boxes, links, width: horizontal ? levSpan : sibSpan, height: horizontal ? sibSpan : levSpan, horizontal };
+}
+
+export interface OrgRow {
+  id: string;
+  name: string;
+  title?: string;
+  manager?: string;
+}
+
+// Several roots (or a cycle) still show: extra roots hang under a synthetic top box.
+export function orgToTree(rows: OrgRow[]): TreeSource {
+  const nodes = new Map<string, TreeSource>();
+  for (const r of rows) nodes.set(r.id, { id: r.id, label: r.name, sublabel: r.title, children: [] });
+  const roots: TreeSource[] = [];
+  for (const r of rows) {
+    const me = nodes.get(r.id)!;
+    const parent = r.manager ? nodes.get(r.manager) : undefined;
+    if (parent && parent !== me) parent.children.push(me);
+    else roots.push(me);
+  }
+  if (!roots.length && rows.length) roots.push(nodes.get(rows[0].id)!);
+  return roots.length === 1 ? roots[0] : { id: '__root__', label: 'Organization', kind: 'group', children: roots };
+}
+
+export function parseOrgCsv(text: string): OrgRow[] {
+  const table: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let quoted = false;
+  const endRow = () => {
+    row.push(cell);
+    cell = '';
+    if (row.some((c) => c.trim())) table.push(row);
+    row = [];
+  };
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',') {
+      row.push(cell);
+      cell = '';
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      endRow();
+    } else cell += ch;
+  }
+  endRow();
+  if (!table.length) return [];
+  const head = table[0].map((h) => h.trim().toLowerCase());
+  const col = (...names: string[]) => head.findIndex((h) => names.includes(h));
+  const id = col('id', 'employee id', 'employeeid');
+  const name = col('name', 'employee', 'full name');
+  const title = col('title', 'job title', 'position', 'role');
+  const mgr = col('manager', 'manager id', 'managerid', 'reports to', 'supervisor', 'parent');
+  if (name < 0) throw new Error('CSV needs a Name column (and optionally ID, Title, Manager)');
+  return table.slice(1).map((r) => ({
+    id: (id >= 0 ? r[id] : r[name]).trim(),
+    name: (r[name] ?? '').trim(),
+    title: title >= 0 ? r[title]?.trim() || undefined : undefined,
+    manager: mgr >= 0 ? r[mgr]?.trim() || undefined : undefined,
+  }));
+}
+
+export type GenealogyKind = 'descendants' | 'ancestors' | 'hourglass';
+
+function personNode(g: GedcomData, id: string): TreeSource {
+  const p = g.people.get(id)!;
+  return { id, label: p.name, sublabel: lifeSpan(p), kind: p.sex === 'M' ? 'male' : p.sex === 'F' ? 'female' : 'unknown', children: [] };
+}
+
+// Pedigree: the person at the root, parents as its children, up to `generations`.
+export function ancestorTree(g: GedcomData, id: string, generations = 5, seen = new Set<string>()): TreeSource {
+  const node = personNode(g, id);
+  seen.add(id);
+  if (generations <= 1) return node;
+  const fam = g.families.get(g.people.get(id)!.famc[0] ?? '');
+  for (const pid of [fam?.husband, fam?.wife]) {
+    if (pid && g.people.has(pid) && !seen.has(pid)) node.children.push(ancestorTree(g, pid, generations - 1, seen));
+  }
+  return node;
+}
+
+// Descendants: a person, then each marriage as a node, then that marriage's children.
+export function descendantTree(g: GedcomData, id: string, generations = 5, seen = new Set<string>()): TreeSource {
+  const node = personNode(g, id);
+  seen.add(id);
+  if (generations <= 1) return node;
+  for (const fid of g.people.get(id)!.fams) {
+    const fam = g.families.get(fid);
+    if (!fam) continue;
+    const spouseId = fam.husband === id ? fam.wife : fam.husband;
+    const marriage: TreeSource = {
+      id: `${id}+${fid}`,
+      label: spouseId && g.people.has(spouseId) ? `⚭ ${g.people.get(spouseId)!.name}` : '⚭ Unknown partner',
+      sublabel: fam.marriage?.date ?? (fam.divorced ? 'divorced' : ''),
+      kind: 'family',
+      children: [],
+    };
+    for (const cid of fam.children) {
+      if (g.people.has(cid) && !seen.has(cid)) marriage.children.push(descendantTree(g, cid, generations - 1, seen));
+    }
+    node.children.push(marriage);
+  }
+  return node;
+}
+
+export function genealogyChart(g: GedcomData, kind: GenealogyKind, rootId: string, generations: number, opts: LayoutOptions = {}): Chart {
+  if (!g.people.has(rootId)) throw new Error(`Unknown person ${rootId}`);
+  if (kind === 'ancestors') return layoutTree(ancestorTree(g, rootId, generations), { orientation: 'right-left', ...opts });
+  if (kind === 'descendants') return layoutTree(descendantTree(g, rootId, generations), opts);
+  // Hourglass: ancestors above, descendants below, joined at the root box.
+  const up = layoutTree(ancestorTree(g, rootId, generations), { ...opts, orientation: 'bottom-up' });
+  const down = layoutTree(descendantTree(g, rootId, generations), { ...opts, orientation: 'top-down' });
+  const rootUp = up.boxes.find((b) => b.id === rootId)!;
+  const rootDown = down.boxes.find((b) => b.id === rootId)!;
+  const dx = rootUp.x - rootDown.x;
+  const dy = rootUp.y - rootDown.y;
+  const boxes = [...up.boxes, ...down.boxes.filter((b) => b.id !== rootId).map((b) => ({ ...b, x: b.x + dx, y: b.y + dy }))];
+  const minX = Math.min(...boxes.map((b) => b.x));
+  const minY = Math.min(...boxes.map((b) => b.y));
+  for (const b of boxes) {
+    b.x -= minX;
+    b.y -= minY;
+  }
+  return {
+    boxes,
+    links: [...up.links, ...down.links],
+    width: Math.max(...boxes.map((b) => b.x + b.w)),
+    height: Math.max(...boxes.map((b) => b.y + b.h)),
+    horizontal: false,
+  };
+}
