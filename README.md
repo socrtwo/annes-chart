@@ -21,11 +21,15 @@ An original, open-source diagramming app in the tradition of Microsoft Visio, wi
 - **Suite shell:** command registry, ribbon, Quick Access Bar, customizable tabs and keyboard, command search, macros, optional AI assistance, and platforms matching the sister apps.
 
 ## Develop
+
+```
 npm install
-npm run dev # web app
-npm test # unit tests
+npm run dev        # web app
+npm test           # unit tests
 npm run typecheck
 npm run build
+```
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
