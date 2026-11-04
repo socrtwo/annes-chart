@@ -1,5 +1,8 @@
 import type { Command } from './commands';
 
+export const SHAPE_KINDS = ['rounded', 'rectangle', 'ellipse', 'diamond'] as const;
+export type ShapeKind = (typeof SHAPE_KINDS)[number];
+
 export interface Shape {
   id: string;
   x: number;
@@ -7,6 +10,7 @@ export interface Shape {
   w: number;
   h: number;
   text: string;
+  kind: ShapeKind;
 }
 
 export interface Connector {
@@ -36,7 +40,7 @@ export const addShape: Command<Doc, NewShape> = {
   title: 'Add shape',
   run: (d, a) => ({
     ...d,
-    shapes: [...d.shapes, { id: nextId('s', d.shapes), x: 0, y: 0, w: 120, h: 60, text: '', ...a }],
+    shapes: [...d.shapes, { id: nextId('s', d.shapes), x: 0, y: 0, w: 120, h: 60, text: '', kind: 'rounded', ...a }],
   }),
 };
 
@@ -115,7 +119,7 @@ export function parseDoc(text: string): Doc {
       throw new Error('Invalid shape in chart file');
     }
     ids.add(s.id);
-    return { id: s.id, x: s.x, y: s.y, w: s.w, h: s.h, text: typeof s.text === 'string' ? s.text : '' };
+    return { id: s.id, x: s.x, y: s.y, w: s.w, h: s.h, text: typeof s.text === 'string' ? s.text : '', kind: SHAPE_KINDS.includes(s.kind) ? s.kind : 'rounded' };
   });
   const connectors: Connector[] = raw.connectors.map((c: any) => {
     if (!c || typeof c.id !== 'string' || !ids.has(c.from) || !ids.has(c.to)) {
