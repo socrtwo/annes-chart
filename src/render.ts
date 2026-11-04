@@ -1,6 +1,6 @@
 import type { Box, Chart } from './layout';
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 const FILL: Record<string, string> = { male: '#dbeafe', female: '#fce7f3', family: '#f3f4f6', group: '#f3f4f6', unknown: '#ffffff' };
 
