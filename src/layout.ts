@@ -154,7 +154,7 @@ export function parseOrgCsv(text: string): OrgRow[] {
   }));
 }
 
-export type GenealogyKind = 'descendants' | 'ancestors' | 'hourglass';
+export type GenealogyKind = 'descendants' | 'ancestors' | 'hourglass' | 'bowtie';
 
 function personNode(g: GedcomData, id: string): TreeSource {
   const p = g.people.get(id)!;
@@ -201,6 +201,7 @@ export function genealogyChart(g: GedcomData, kind: GenealogyKind, rootId: strin
   if (!g.people.has(rootId)) throw new Error(`Unknown person ${rootId}`);
   if (kind === 'ancestors') return layoutTree(ancestorTree(g, rootId, generations), { orientation: 'right-left', ...opts });
   if (kind === 'descendants') return layoutTree(descendantTree(g, rootId, generations), opts);
+  if (kind === 'bowtie') return bowtieChart(g, rootId, generations, opts);
   // Hourglass: ancestors above, descendants below, joined at the root box.
   const up = layoutTree(ancestorTree(g, rootId, generations), { ...opts, orientation: 'bottom-up' });
   const down = layoutTree(descendantTree(g, rootId, generations), { ...opts, orientation: 'top-down' });
@@ -221,5 +222,40 @@ export function genealogyChart(g: GedcomData, kind: GenealogyKind, rootId: strin
     width: Math.max(...boxes.map((b) => b.x + b.w)),
     height: Math.max(...boxes.map((b) => b.y + b.h)),
     horizontal: false,
+  };
+}
+
+// Bowtie: the person in the middle, father's ancestors extending left, mother's extending right.
+function bowtieChart(g: GedcomData, rootId: string, generations: number, opts: LayoutOptions): Chart {
+  const { boxW = 160, boxH = 56, gapY = 48 } = opts;
+  const me = personNode(g, rootId);
+  const fam = g.families.get(g.people.get(rootId)!.famc[0] ?? '');
+  const boxes: Box[] = [{ id: rootId, label: me.label, sublabel: me.sublabel, kind: me.kind, x: 0, y: 0, w: boxW, h: boxH }];
+  const links: Link[] = [];
+  const sides: [string | undefined, Orientation, string][] = [
+    [fam?.husband, 'right-left', ''],
+    [fam?.wife, 'left-right', 'M:'],
+  ];
+  for (const [pid, orientation, prefix] of sides) {
+    if (!pid || !g.people.has(pid) || generations < 2) continue;
+    const side = layoutTree(ancestorTree(g, pid, generations - 1), { ...opts, orientation });
+    const top = side.boxes.find((b) => b.id === pid)!;
+    const dx = orientation === 'right-left' ? -gapY - boxW - top.x : boxW + gapY - top.x;
+    for (const b of side.boxes) boxes.push({ ...b, id: prefix + b.id, x: b.x + dx, y: b.y - top.y }); // roots line up with the person
+    for (const l of side.links) links.push({ from: prefix + l.from, to: prefix + l.to });
+    links.push({ from: rootId, to: prefix + pid });
+  }
+  const minX = Math.min(...boxes.map((b) => b.x));
+  const minY = Math.min(...boxes.map((b) => b.y));
+  for (const b of boxes) {
+    b.x -= minX;
+    b.y -= minY;
+  }
+  return {
+    boxes,
+    links,
+    width: Math.max(...boxes.map((b) => b.x + b.w)),
+    height: Math.max(...boxes.map((b) => b.y + b.h)),
+    horizontal: true,
   };
 }

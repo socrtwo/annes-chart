@@ -1,6 +1,7 @@
 import { parseGedcom, type GedcomData } from './gedcom';
 import { genealogyChart, layoutTree, orgToTree, parseOrgCsv, type GenealogyKind } from './layout';
 import { renderSvg } from './render';
+import { fanChartSvg } from './fan';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 let ged: GedcomData | undefined;
@@ -14,8 +15,11 @@ function show(markup: string, note: string) {
 
 function drawGenealogy() {
   if (!ged || !$<HTMLSelectElement>('person').value) return;
-  const chart = genealogyChart(ged, $<HTMLSelectElement>('kind').value as GenealogyKind, $<HTMLSelectElement>('person').value, Number($<HTMLInputElement>('gens').value) || 5);
-  show(renderSvg(chart), `${ged.people.size} people, ${ged.families.size} families${ged.warnings.length ? `, ${ged.warnings.length} warnings` : ''}`);
+  const kind = $<HTMLSelectElement>('kind').value;
+  const person = $<HTMLSelectElement>('person').value;
+  const gens = Number($<HTMLInputElement>('gens').value) || 5;
+  const markup = kind === 'fan' ? fanChartSvg(ged, person, gens) : renderSvg(genealogyChart(ged, kind as GenealogyKind, person, gens));
+  show(markup, `${ged.people.size} people, ${ged.families.size} families${ged.warnings.length ? `, ${ged.warnings.length} warnings` : ''}`);
 }
 
 $<HTMLInputElement>('file').addEventListener('change', async (e) => {
