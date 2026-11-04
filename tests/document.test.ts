@@ -64,6 +64,14 @@ describe('save format', () => {
     expect(parseDoc(serializeDoc(bus.state))).toEqual(bus.state);
   });
 
+  it('keeps shape kinds and defaults unknown or missing ones', () => {
+    const bus = make();
+    bus.execute('shape.add', { kind: 'diamond' });
+    expect(parseDoc(serializeDoc(bus.state)).shapes[0].kind).toBe('diamond');
+    const old = { version: 1, shapes: [{ id: 'a', x: 0, y: 0, w: 1, h: 1, kind: 'star' }, { id: 'b', x: 0, y: 0, w: 1, h: 1 }], connectors: [] };
+    expect(parseDoc(JSON.stringify(old)).shapes.map((s) => s.kind)).toEqual(['rounded', 'rounded']);
+  });
+
   it('rejects bad input', () => {
     expect(() => parseDoc('{')).toThrow(/invalid JSON/);
     expect(() => parseDoc('{"version":2}')).toThrow(/Unsupported/);

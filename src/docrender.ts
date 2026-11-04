@@ -1,7 +1,21 @@
 import { esc } from './render';
-import type { Doc } from './document';
+import type { Doc, Shape } from './document';
 
 const MARGIN = 16;
+
+function body(s: Shape, stroke: string, width: number): string {
+  const paint = `fill="#fff" stroke="${stroke}" stroke-width="${width}"`;
+  const cx = s.x + s.w / 2;
+  const cy = s.y + s.h / 2;
+  switch (s.kind) {
+    case 'ellipse':
+      return `<ellipse cx="${cx}" cy="${cy}" rx="${s.w / 2}" ry="${s.h / 2}" ${paint}/>`;
+    case 'diamond':
+      return `<polygon points="${cx},${s.y} ${s.x + s.w},${cy} ${cx},${s.y + s.h} ${s.x},${cy}" ${paint}/>`;
+    default:
+      return `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="${s.kind === 'rectangle' ? 0 : 6}" ${paint}/>`;
+  }
+}
 
 /** Renders a document to SVG at 1:1 scale so pointer deltas equal document units. */
 export function renderDoc(doc: Doc, selected: ReadonlySet<string> = new Set(), minW = 800, minH = 500): string {
@@ -28,7 +42,7 @@ export function renderDoc(doc: Doc, selected: ReadonlySet<string> = new Set(), m
   for (const s of doc.shapes) {
     const on = selected.has(s.id);
     parts.push(
-      `<g data-id="${esc(s.id)}" style="cursor:move"><rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="6" fill="#fff" stroke="${on ? '#2563eb' : '#374151'}" stroke-width="${on ? 3 : 1}"/>` +
+      `<g data-id="${esc(s.id)}" style="cursor:move">${body(s, on ? '#2563eb' : '#374151', on ? 3 : 1)}` +
         `<text x="${s.x + s.w / 2}" y="${s.y + s.h / 2 + 5}" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#111827">${esc(s.text)}</text></g>`,
     );
   }

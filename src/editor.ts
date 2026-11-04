@@ -1,5 +1,5 @@
 import { CommandBus } from './commands';
-import { documentCommands, emptyDoc, type Doc } from './document';
+import { documentCommands, emptyDoc, type Doc, type ShapeKind } from './document';
 import { renderDoc } from './docrender';
 
 /** Interactive canvas: selection, drag to move, connect, edit text, undo/redo. */
@@ -34,9 +34,9 @@ export class Editor {
     return renderDoc(this.bus.state);
   }
 
-  addShape(): void {
+  addShape(kind: ShapeKind = 'rounded'): void {
     const n = this.bus.state.shapes.length;
-    this.bus.execute('shape.add', { x: 40 + (n % 6) * 150, y: 40 + Math.floor(n / 6) * 90, text: `Shape ${n + 1}` });
+    this.bus.execute('shape.add', { x: 40 + (n % 6) * 150, y: 40 + Math.floor(n / 6) * 90, text: `Shape ${n + 1}`, kind });
   }
 
   connectSelected(): boolean {

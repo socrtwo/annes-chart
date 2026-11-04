@@ -2,7 +2,7 @@ import { parseGedcom, type GedcomData } from './gedcom';
 import { genealogyChart, layoutTree, orgToTree, parseOrgCsv, type GenealogyKind } from './layout';
 import { renderSvg } from './render';
 import { Editor } from './editor';
-import { parseDoc, serializeDoc, type Doc } from './document';
+import { parseDoc, serializeDoc, type Doc, type ShapeKind } from './document';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 let ged: GedcomData | undefined;
@@ -57,7 +57,7 @@ $('save').addEventListener('click', () => {
 });
 
 let editor: Editor | undefined;
-const toolIds = ['add', 'connect', 'delete', 'undo', 'redo', 'savedoc'];
+const toolIds = ['stencil', 'add', 'connect', 'delete', 'undo', 'redo', 'savedoc'];
 
 function syncTools() {
   for (const id of toolIds) $<HTMLButtonElement>(id).disabled = !editor;
@@ -83,7 +83,7 @@ function startEditor(doc?: Doc) {
 }
 
 $('new').addEventListener('click', () => startEditor());
-$('add').addEventListener('click', () => editor?.addShape());
+$('add').addEventListener('click', () => editor?.addShape($<HTMLSelectElement>('stencil').value as ShapeKind));
 $('connect').addEventListener('click', () => {
   if (editor && !editor.connectSelected()) $('msg').textContent = 'Select two unconnected shapes (shift-click) to connect them.';
 });
