@@ -101,7 +101,7 @@ $('savedoc').addEventListener('click', () => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (!editor || (e.target as HTMLElement).closest('input,select,textarea')) return;
+  if (!editor || (e.target as Element).closest?.('input,select,textarea')) return;
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key.toLowerCase() === 'z') (e.preventDefault(), e.shiftKey ? editor.redo() : editor.undo());
   else if (mod && e.key.toLowerCase() === 'y') (e.preventDefault(), editor.redo());

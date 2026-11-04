@@ -59,16 +59,17 @@ export const setText: Command<Doc, { id: string; text: string }> = {
   },
 };
 
-/** Deletes a shape and every connector attached to it. */
-export const deleteShape: Command<Doc, string> = {
+/** Deletes one or more shapes and every connector attached to them, as a single step. */
+export const deleteShape: Command<Doc, string | string[]> = {
   id: 'shape.delete',
   title: 'Delete shape',
-  run: (d, id) => {
-    if (!d.shapes.some((s) => s.id === id)) return undefined;
+  run: (d, arg) => {
+    const ids = new Set(Array.isArray(arg) ? arg : [arg]);
+    if (!d.shapes.some((s) => ids.has(s.id))) return undefined;
     return {
       ...d,
-      shapes: d.shapes.filter((s) => s.id !== id),
-      connectors: d.connectors.filter((c) => c.from !== id && c.to !== id),
+      shapes: d.shapes.filter((s) => !ids.has(s.id)),
+      connectors: d.connectors.filter((c) => !ids.has(c.from) && !ids.has(c.to)),
     };
   },
 };

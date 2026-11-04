@@ -45,7 +45,7 @@ export class Editor {
   }
 
   deleteSelected(): void {
-    for (const id of this.selected) this.bus.execute('shape.delete', id);
+    if (this.selected.size) this.bus.execute('shape.delete', [...this.selected]);
     this.selected.clear();
     this.render();
   }

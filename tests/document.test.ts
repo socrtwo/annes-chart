@@ -34,6 +34,17 @@ describe('document commands', () => {
     expect(bus.state.connectors).toHaveLength(1);
   });
 
+  it('deletes several shapes as one undo step', () => {
+    const bus = make();
+    for (let i = 0; i < 3; i++) bus.execute('shape.add');
+    bus.execute('connector.add', { from: 's1', to: 's2' });
+    bus.execute('shape.delete', ['s1', 's2']);
+    expect(bus.state.shapes.map((s) => s.id)).toEqual(['s3']);
+    bus.undo();
+    expect(bus.state.shapes).toHaveLength(3);
+    expect(bus.state.connectors).toHaveLength(1);
+  });
+
   it('generates unique ids after deletions', () => {
     const bus = make();
     bus.execute('shape.add');
