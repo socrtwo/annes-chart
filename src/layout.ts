@@ -22,6 +22,8 @@ export interface Box {
 export interface Link {
   from: string;
   to: string;
+  dotted?: boolean;
+  hang?: boolean;
 }
 
 export interface Chart {
@@ -92,12 +94,13 @@ export interface OrgRow {
   name: string;
   title?: string;
   manager?: string;
+  dotted?: string;
 }
 
 // Several roots (or a cycle) still show: extra roots hang under a synthetic top box.
 export function orgToTree(rows: OrgRow[]): TreeSource {
   const nodes = new Map<string, TreeSource>();
-  for (const r of rows) nodes.set(r.id, { id: r.id, label: r.name, sublabel: r.title, children: [] });
+  for (const r of rows) nodes.set(r.id, { id: r.id, label: r.name || 'Vacant', sublabel: r.title, kind: r.name ? undefined : 'vacant', children: [] });
   const roots: TreeSource[] = [];
   for (const r of rows) {
     const me = nodes.get(r.id)!;
@@ -144,6 +147,7 @@ export function parseOrgCsv(text: string): OrgRow[] {
   const id = col('id', 'employee id', 'employeeid');
   const name = col('name', 'employee', 'full name');
   const title = col('title', 'job title', 'position', 'role');
+  const dot = col('dotted', 'dotted line', 'dotted manager', 'dotted line manager');
   const mgr = col('manager', 'manager id', 'managerid', 'reports to', 'supervisor', 'parent');
   if (name < 0) throw new Error('CSV needs a Name column (and optionally ID, Title, Manager)');
   return table.slice(1).map((r) => ({
@@ -151,6 +155,7 @@ export function parseOrgCsv(text: string): OrgRow[] {
     name: (r[name] ?? '').trim(),
     title: title >= 0 ? r[title]?.trim() || undefined : undefined,
     manager: mgr >= 0 ? r[mgr]?.trim() || undefined : undefined,
+    dotted: dot >= 0 ? r[dot]?.trim() || undefined : undefined,
   }));
 }
 

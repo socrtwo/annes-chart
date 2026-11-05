@@ -1,6 +1,7 @@
 import { parseGedcom, type GedcomData } from './gedcom';
-import { genealogyChart, layoutTree, orgToTree, parseOrgCsv, type GenealogyKind } from './layout';
+import { genealogyChart, parseOrgCsv, type GenealogyKind } from './layout';
 import { renderSvg } from './render';
+import { orgChart, type OrgStyle } from './org';
 import { fanChartSvg } from './fan';
 import { writeGedcom } from './gedcom-export';
 import sampleGed from '../samples/family.ged?raw';
@@ -8,6 +9,13 @@ import sampleGed from '../samples/family.ged?raw';
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 let ged: GedcomData | undefined;
 let svg = '';
+let orgRows: ReturnType<typeof parseOrgCsv> | undefined;
+
+function drawOrg() {
+  if (!orgRows) return;
+  svg = renderSvg(orgChart(orgRows, $<HTMLSelectElement>('orgstyle').value as OrgStyle));
+  $('stage').innerHTML = svg;
+}
 
 function show(markup: string, note: string) {
   svg = markup;
@@ -25,6 +33,7 @@ function drawGenealogy() {
 }
 
 function loadGedcom(bytes: Uint8Array) {
+  orgRows = undefined;
   ged = parseGedcom(bytes);
   const sel = $<HTMLSelectElement>('person');
   sel.replaceChildren(
@@ -52,7 +61,9 @@ $<HTMLInputElement>('file').addEventListener('change', async (e) => {
     if (/\.csv$/i.test(file.name)) {
       ged = undefined;
       const rows = parseOrgCsv(await file.text());
-      show(renderSvg(layoutTree(orgToTree(rows))), `${rows.length} people in the org chart`);
+      orgRows = rows;
+      drawOrg();
+      show(svg, `${rows.length} people in the org chart`);
       return;
     }
     loadGedcom(new Uint8Array(await file.arrayBuffer()));
@@ -61,6 +72,7 @@ $<HTMLInputElement>('file').addEventListener('change', async (e) => {
   }
 });
 
+$('orgstyle').addEventListener('change', drawOrg);
 for (const id of ['kind', 'person', 'gens']) $(id).addEventListener('change', drawGenealogy);
 
 $('save').addEventListener('click', () => {

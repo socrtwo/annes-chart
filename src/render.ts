@@ -2,7 +2,7 @@ import type { Box, Chart } from './layout';
 
 export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
-const FILL: Record<string, string> = { male: '#dbeafe', female: '#fce7f3', family: '#f3f4f6', group: '#f3f4f6', unknown: '#ffffff' };
+const FILL: Record<string, string> = { male: '#dbeafe', female: '#fce7f3', family: '#f3f4f6', group: '#f3f4f6', vacant: '#fef3c7', unknown: '#ffffff' };
 
 export function trim(s: string, max: number) {
   return s.length > max ? s.slice(0, max - 1) + '…' : s;
@@ -23,10 +23,14 @@ export function renderSvg(chart: Chart, margin = 16): string {
     if (!a || !b) continue;
     const [x1, y1] = anchor(a, b, horizontal);
     const [x2, y2] = anchor(b, a, horizontal);
-    const d = horizontal
+    const d = l.hang
+      ? `M${a.x + 16} ${a.y + a.h}V${b.y + b.h / 2}H${b.x}`
+      : l.dotted
+        ? `M${x1} ${y1}V${(y1 + y2) / 2}H${x2}V${y2}`
+        : horizontal
       ? `M${x1} ${y1}H${(x1 + x2) / 2}V${y2}H${x2}`
       : `M${x1} ${y1}V${(y1 + y2) / 2}H${x2}V${y2}`;
-    parts.push(`<path d="${d}" fill="none" stroke="#6b7280" stroke-width="1.5"/>`);
+    parts.push(`<path d="${d}" fill="none" stroke="#6b7280" stroke-width="1.5"${l.dotted ? ' stroke-dasharray="5 4"' : ''}/>`);
   }
   for (const b of chart.boxes) {
     const cx = b.x + b.w / 2;
