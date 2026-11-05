@@ -13,7 +13,7 @@ let orgRows: ReturnType<typeof parseOrgCsv> | undefined;
 
 function drawOrg() {
   if (!orgRows) return;
-  svg = renderSvg(orgChart(orgRows, $<HTMLSelectElement>('orgstyle').value as OrgStyle));
+  svg = renderSvg(orgChart(orgRows, $<HTMLSelectElement>('orgstyle').value as OrgStyle, {}, $<HTMLInputElement>('rollup').checked));
   $('stage').innerHTML = svg;
 }
 
@@ -72,7 +72,7 @@ $<HTMLInputElement>('file').addEventListener('change', async (e) => {
   }
 });
 
-$('orgstyle').addEventListener('change', drawOrg);
+for (const id of ['orgstyle', 'rollup']) $(id).addEventListener('change', drawOrg);
 for (const id of ['kind', 'person', 'gens']) $(id).addEventListener('change', drawGenealogy);
 
 $('save').addEventListener('click', () => {

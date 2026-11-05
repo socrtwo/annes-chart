@@ -25,4 +25,16 @@ describe('org styles', () => {
   it('renders dashed links', () => {
     expect(renderSvg(orgChart(rows))).toContain('stroke-dasharray');
   });
+
+  it('puts assistants first and styles them', () => {
+    const r = parseOrgCsv('ID,Name,Title,Manager,Type\n1,Jane,CEO,,\n2,Bob,CTO,1,\n3,Amy,EA,1,Assistant\n');
+    const c = orgChart(r);
+    expect(c.boxes.find((b) => b.id === '3')?.kind).toBe('assistant');
+    expect(c.boxes.find((b) => b.id === '3')!.x).toBeLessThan(c.boxes.find((b) => b.id === '2')!.x);
+  });
+  it('rolls up report counts', () => {
+    const c = orgChart(rows, 'standard', {}, true);
+    expect(c.boxes.find((b) => b.id === '1')?.sublabel).toBe('CEO · 3 reports');
+    expect(c.boxes.find((b) => b.id === '2')?.sublabel).toBe('CTO · 1 report');
+  });
 });
