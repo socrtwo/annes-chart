@@ -11,6 +11,11 @@
       #stage { flex: 1; overflow: auto; background: #f9fafb; padding: 12px; }
       #msg { font-size: 12px; opacity: 0.85; }
     </style>
+    <style>
+    @media print {
+      header { display: none; }
+    }
+  </style>
   </head>
   <body>
     <header>
@@ -37,6 +42,8 @@
       <label>Generations <input id="gens" type="number" min="1" max="20" value="5" style="width: 3em" /></label>
       <button id="sample">Load sample</button>
       <button id="save">Save SVG</button>
+      <button id="savepng">Save PNG</button>
+      <button id="print">Print / PDF</button>
       <button id="saveged">Save GEDCOM</button>
       <span id="msg">Open a GEDCOM (.ged) file or an org chart CSV or XLSX (ID, Name, Title, Manager).</span>
     </header>

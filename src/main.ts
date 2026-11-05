@@ -2,6 +2,7 @@ import { parseGedcom, type GedcomData } from './gedcom';
 import { genealogyChart, parseOrgCsv, type GenealogyKind } from './layout';
 import { renderSvg } from './render';
 import { readXlsx, rowsToCsv } from './xlsx';
+import { svgToPng } from './raster';
 import { orgChart, type OrgStyle } from './org';
 import { fanChartSvg } from './fan';
 import { writeGedcom } from './gedcom-export';
@@ -79,4 +80,20 @@ for (const id of ['kind', 'person', 'gens']) $(id).addEventListener('change', dr
 
 $('save').addEventListener('click', () => {
   if (svg) download(svg, 'image/svg+xml', 'chart.svg');
+});
+
+$('savepng').addEventListener('click', async () => {
+  if (!svg) return;
+  try {
+    const blob = await svgToPng(svg);
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'chart.png' });
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (err) {
+    $('msg').textContent = String(err instanceof Error ? err.message : err);
+  }
+});
+
+$('print').addEventListener('click', () => {
+  if (svg) window.print();
 });
