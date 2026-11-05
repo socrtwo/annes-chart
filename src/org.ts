@@ -25,8 +25,18 @@ function layoutHanging(root: TreeSource, opts: LayoutOptions = {}): Chart {
   return { boxes, links, width: maxDepth * (indent + gapX / 2) + boxW, height: row * (boxH + gapY) - gapY, horizontal: false };
 }
 
-export function orgChart(rows: OrgRow[], style: OrgStyle = 'standard', opts: LayoutOptions = {}): Chart {
+// Appends the total number of people below each manager.
+function rollUp(n: TreeSource, seen = new Set<string>()): number {
+  seen.add(n.id);
+  let total = 0;
+  for (const c of n.children) if (!seen.has(c.id)) total += 1 + rollUp(c, seen);
+  if (total) n.sublabel = `${n.sublabel ? n.sublabel + ' · ' : ''}${total} report${total === 1 ? '' : 's'}`;
+  return total;
+}
+
+export function orgChart(rows: OrgRow[], style: OrgStyle = 'standard', opts: LayoutOptions = {}, rollup = false): Chart {
   const tree = orgToTree(rows);
+  if (rollup) rollUp(tree);
   const chart =
     style === 'hanging' ? layoutHanging(tree, opts) : layoutTree(tree, { ...opts, orientation: style === 'horizontal' ? 'left-right' : 'top-down' });
   const ids = new Set(chart.boxes.map((b) => b.id));

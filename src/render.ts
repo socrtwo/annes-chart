@@ -2,7 +2,7 @@ import type { Box, Chart } from './layout';
 
 export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
-const FILL: Record<string, string> = { male: '#dbeafe', female: '#fce7f3', family: '#f3f4f6', group: '#f3f4f6', vacant: '#fef3c7', unknown: '#ffffff' };
+const FILL: Record<string, string> = { male: '#dbeafe', female: '#fce7f3', family: '#f3f4f6', group: '#f3f4f6', vacant: '#fef3c7', assistant: '#dcfce7', unknown: '#ffffff' };
 
 export function trim(s: string, max: number) {
   return s.length > max ? s.slice(0, max - 1) + '…' : s;

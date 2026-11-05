@@ -95,17 +95,21 @@ export interface OrgRow {
   title?: string;
   manager?: string;
   dotted?: string;
+  assistant?: boolean;
 }
 
 // Several roots (or a cycle) still show: extra roots hang under a synthetic top box.
 export function orgToTree(rows: OrgRow[]): TreeSource {
   const nodes = new Map<string, TreeSource>();
-  for (const r of rows) nodes.set(r.id, { id: r.id, label: r.name || 'Vacant', sublabel: r.title, kind: r.name ? undefined : 'vacant', children: [] });
+  for (const r of rows) nodes.set(r.id, { id: r.id, label: r.name || 'Vacant', sublabel: r.title, kind: !r.name ? 'vacant' : r.assistant ? 'assistant' : undefined, children: [] });
   const roots: TreeSource[] = [];
   for (const r of rows) {
     const me = nodes.get(r.id)!;
     const parent = r.manager ? nodes.get(r.manager) : undefined;
-    if (parent && parent !== me) parent.children.push(me);
+    if (parent && parent !== me) {
+      if (r.assistant) parent.children.unshift(me);
+      else parent.children.push(me);
+    }
     else roots.push(me);
   }
   if (!roots.length && rows.length) roots.push(nodes.get(rows[0].id)!);
@@ -147,6 +151,7 @@ export function parseOrgCsv(text: string): OrgRow[] {
   const id = col('id', 'employee id', 'employeeid');
   const name = col('name', 'employee', 'full name');
   const title = col('title', 'job title', 'position', 'role');
+  const typ = col('type', 'position type', 'assistant');
   const dot = col('dotted', 'dotted line', 'dotted manager', 'dotted line manager');
   const mgr = col('manager', 'manager id', 'managerid', 'reports to', 'supervisor', 'parent');
   if (name < 0) throw new Error('CSV needs a Name column (and optionally ID, Title, Manager)');
@@ -155,6 +160,7 @@ export function parseOrgCsv(text: string): OrgRow[] {
     name: (r[name] ?? '').trim(),
     title: title >= 0 ? r[title]?.trim() || undefined : undefined,
     manager: mgr >= 0 ? r[mgr]?.trim() || undefined : undefined,
+    assistant: typ >= 0 ? /^(assistant|asst|y|yes|true|1)$/i.test(r[typ]?.trim() ?? '') : undefined,
     dotted: dot >= 0 ? r[dot]?.trim() || undefined : undefined,
   }));
 }
