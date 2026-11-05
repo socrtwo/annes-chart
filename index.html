@@ -15,7 +15,7 @@
   <body>
     <header>
       <strong>Anne's Chart</strong>
-      <label>Open <input id="file" type="file" accept=".ged,.gedcom,.csv" /></label>
+      <label>Open <input id="file" type="file" accept=".ged,.gedcom,.csv,.xlsx" /></label>
       <label>Chart
         <select id="kind">
           <option value="descendants">Descendants</option>
@@ -38,7 +38,7 @@
       <button id="sample">Load sample</button>
       <button id="save">Save SVG</button>
       <button id="saveged">Save GEDCOM</button>
-      <span id="msg">Open a GEDCOM (.ged) file or an org chart CSV (ID, Name, Title, Manager).</span>
+      <span id="msg">Open a GEDCOM (.ged) file or an org chart CSV or XLSX (ID, Name, Title, Manager).</span>
     </header>
     <div id="stage"></div>
     <script type="module" src="/src/main.ts"></script>

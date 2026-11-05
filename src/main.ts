@@ -1,6 +1,7 @@
 import { parseGedcom, type GedcomData } from './gedcom';
 import { genealogyChart, parseOrgCsv, type GenealogyKind } from './layout';
 import { renderSvg } from './render';
+import { readXlsx, rowsToCsv } from './xlsx';
 import { orgChart, type OrgStyle } from './org';
 import { fanChartSvg } from './fan';
 import { writeGedcom } from './gedcom-export';
@@ -58,9 +59,10 @@ $<HTMLInputElement>('file').addEventListener('change', async (e) => {
   const file = (e.target as HTMLInputElement).files?.[0];
   if (!file) return;
   try {
-    if (/\.csv$/i.test(file.name)) {
+    if (/\.(csv|xlsx)$/i.test(file.name)) {
       ged = undefined;
-      const rows = parseOrgCsv(await file.text());
+      const text = /\.xlsx$/i.test(file.name) ? rowsToCsv(await readXlsx(new Uint8Array(await file.arrayBuffer()))) : await file.text();
+      const rows = parseOrgCsv(text);
       orgRows = rows;
       drawOrg();
       show(svg, `${rows.length} people in the org chart`);
