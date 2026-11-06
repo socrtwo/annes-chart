@@ -3,6 +3,7 @@ import { genealogyChart, parseOrgCsv, type GenealogyKind } from './layout';
 import { renderSvg } from './render';
 import { readXlsx, rowsToCsv } from './xlsx';
 import { svgToPng } from './raster';
+import { redactLiving } from './privacy';
 import { orgChart, type OrgStyle } from './org';
 import { fanChartSvg } from './fan';
 import { writeGedcom } from './gedcom-export';
@@ -25,12 +26,16 @@ function show(markup: string, note: string) {
   $('msg').textContent = note;
 }
 
+const view = () => (ged && $<HTMLInputElement>('hideliving').checked ? redactLiving(ged) : ged!);
+
 function drawGenealogy() {
   if (!ged || !$<HTMLSelectElement>('person').value) return;
+  const data = view();
+  for (const o of $<HTMLSelectElement>('person').options) o.textContent = data.people.get(o.value)?.name ?? o.value;
   const kind = $<HTMLSelectElement>('kind').value;
   const person = $<HTMLSelectElement>('person').value;
   const gens = Number($<HTMLInputElement>('gens').value) || 5;
-  const markup = kind === 'fan' ? fanChartSvg(ged, person, gens) : renderSvg(genealogyChart(ged, kind as GenealogyKind, person, gens));
+  const markup = kind === 'fan' ? fanChartSvg(data, person, gens) : renderSvg(genealogyChart(data, kind as GenealogyKind, person, gens));
   show(markup, `${ged.people.size} people, ${ged.families.size} families${ged.warnings.length ? `, ${ged.warnings.length} warnings` : ''}`);
 }
 
@@ -53,7 +58,7 @@ function download(text: string, type: string, name: string) {
 $('sample').addEventListener('click', () => loadGedcom(new TextEncoder().encode(sampleGed)));
 
 $('saveged').addEventListener('click', () => {
-  if (ged) download(writeGedcom(ged), 'text/plain', 'family.ged');
+  if (ged) download(writeGedcom(view()), 'text/plain', 'family.ged');
 });
 
 $<HTMLInputElement>('file').addEventListener('change', async (e) => {
@@ -76,7 +81,7 @@ $<HTMLInputElement>('file').addEventListener('change', async (e) => {
 });
 
 for (const id of ['orgstyle', 'rollup']) $(id).addEventListener('change', drawOrg);
-for (const id of ['kind', 'person', 'gens']) $(id).addEventListener('change', drawGenealogy);
+for (const id of ['kind', 'person', 'gens', 'hideliving']) $(id).addEventListener('change', drawGenealogy);
 
 $('save').addEventListener('click', () => {
   if (svg) download(svg, 'image/svg+xml', 'chart.svg');
