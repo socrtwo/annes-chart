@@ -110,6 +110,11 @@ export function parseDoc(text: string): Doc {
   } catch {
     throw new Error('Not a valid chart file (invalid JSON)');
   }
+  return validateDoc(raw);
+}
+
+/** Validates an already-parsed single-page document. */
+export function validateDoc(raw: any): Doc {
   if (!raw || raw.version !== 1 || !Array.isArray(raw.shapes) || !Array.isArray(raw.connectors)) {
     throw new Error('Unsupported chart file format');
   }
