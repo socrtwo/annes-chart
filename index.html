@@ -20,7 +20,7 @@
   <body>
     <header>
       <strong>Anne's Chart</strong>
-      <label>Open <input id="file" type="file" accept=".ged,.gedcom,.csv,.xlsx" /></label>
+      <label>Open <input id="file" type="file" accept=".ged,.gedcom,.csv,.xlsx,.json" /></label>
       <label>Chart
         <select id="kind">
           <option value="descendants">Descendants</option>
@@ -47,6 +47,21 @@
       <button id="print">Print / PDF</button>
       <button id="saveged">Save GEDCOM</button>
       <span id="msg">Open a GEDCOM (.ged) file or an org chart CSV or XLSX (ID, Name, Title, Manager).</span>
+      <span id="editor-tools" style="display: contents">
+        <button id="new">New drawing</button>
+        <select id="stencil" disabled title="Stencil">
+          <option value="rounded">Rounded box</option>
+          <option value="rectangle">Rectangle</option>
+          <option value="ellipse">Ellipse</option>
+          <option value="diamond">Diamond</option>
+        </select>
+        <button id="add" disabled>Add shape</button>
+        <button id="connect" disabled title="Select two shapes (shift-click), then connect">Connect</button>
+        <button id="delete" disabled>Delete</button>
+        <button id="undo" disabled>Undo</button>
+        <button id="redo" disabled>Redo</button>
+        <button id="savedoc" disabled>Save .json</button>
+      </span>
     </header>
     <div id="stage"></div>
     <script type="module" src="/src/main.ts"></script>

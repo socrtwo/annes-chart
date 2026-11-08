@@ -8,6 +8,8 @@ import { orgChart, type OrgStyle } from './org';
 import { fanChartSvg } from './fan';
 import { writeGedcom } from './gedcom-export';
 import sampleGed from '../samples/family.ged?raw';
+import { Editor } from './editor';
+import { parseDoc, serializeDoc, type Doc, type ShapeKind } from './document';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 let ged: GedcomData | undefined;
@@ -21,6 +23,7 @@ function drawOrg() {
 }
 
 function show(markup: string, note: string) {
+  stopEditor();
   svg = markup;
   $('stage').innerHTML = markup;
   $('msg').textContent = note;
@@ -65,6 +68,11 @@ $<HTMLInputElement>('file').addEventListener('change', async (e) => {
   const file = (e.target as HTMLInputElement).files?.[0];
   if (!file) return;
   try {
+    if (/\.json$/i.test(file.name)) {
+      ged = undefined;
+      startEditor(parseDoc(await file.text()));
+      return;
+    }
     if (/\.(csv|xlsx)$/i.test(file.name)) {
       ged = undefined;
       const text = /\.xlsx$/i.test(file.name) ? rowsToCsv(await readXlsx(new Uint8Array(await file.arrayBuffer()))) : await file.text();
@@ -101,4 +109,56 @@ $('savepng').addEventListener('click', async () => {
 
 $('print').addEventListener('click', () => {
   if (svg) window.print();
+});
+
+let editor: Editor | undefined;
+const toolIds = ['stencil', 'add', 'connect', 'delete', 'undo', 'redo', 'savedoc'];
+
+function syncTools() {
+  for (const id of toolIds) $<HTMLButtonElement>(id).disabled = !editor;
+  if (!editor) return;
+  $<HTMLButtonElement>('undo').disabled = !editor.bus.canUndo;
+  $<HTMLButtonElement>('redo').disabled = !editor.bus.canRedo;
+}
+
+function stopEditor() {
+  editor?.dispose();
+  editor = undefined;
+  syncTools();
+}
+
+function startEditor(doc?: Doc) {
+  stopEditor();
+  editor = new Editor($('stage'), doc, (markup) => {
+    svg = markup;
+    syncTools();
+  });
+  $('msg').textContent = 'Drag to move, shift-click to multi-select, double-click to edit text.';
+  syncTools();
+}
+
+$('new').addEventListener('click', () => startEditor());
+$('add').addEventListener('click', () => editor?.addShape($<HTMLSelectElement>('stencil').value as ShapeKind));
+$('connect').addEventListener('click', () => {
+  if (editor && !editor.connectSelected()) $('msg').textContent = 'Select two unconnected shapes (shift-click) to connect them.';
+});
+$('delete').addEventListener('click', () => editor?.deleteSelected());
+$('undo').addEventListener('click', () => editor?.undo());
+$('redo').addEventListener('click', () => editor?.redo());
+$('savedoc').addEventListener('click', () => {
+  if (!editor) return;
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([serializeDoc(editor.bus.state)], { type: 'application/json' })),
+    download: 'chart.json',
+  });
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+document.addEventListener('keydown', (e) => {
+  if (!editor || (e.target as Element).closest?.('input,select,textarea')) return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === 'z') (e.preventDefault(), e.shiftKey ? editor.redo() : editor.undo());
+  else if (mod && e.key.toLowerCase() === 'y') (e.preventDefault(), editor.redo());
+  else if (e.key === 'Delete') editor.deleteSelected();
 });
