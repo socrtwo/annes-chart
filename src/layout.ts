@@ -5,6 +5,7 @@ export interface TreeSource {
   label: string;
   sublabel?: string;
   kind?: string;
+  photo?: string;
   children: TreeSource[];
 }
 
@@ -13,6 +14,7 @@ export interface Box {
   label: string;
   sublabel?: string;
   kind?: string;
+  photo?: string;
   x: number;
   y: number;
   w: number;
@@ -80,6 +82,7 @@ export function layoutTree(root: TreeSource, opts: LayoutOptions = {}): Chart {
       label: n.label,
       sublabel: n.sublabel,
       kind: n.kind,
+      photo: n.photo,
       x: horizontal ? lev : sib,
       y: horizontal ? sib : lev,
       w: boxW,
@@ -96,12 +99,13 @@ export interface OrgRow {
   manager?: string;
   dotted?: string;
   assistant?: boolean;
+  photo?: string;
 }
 
 // Several roots (or a cycle) still show: extra roots hang under a synthetic top box.
 export function orgToTree(rows: OrgRow[]): TreeSource {
   const nodes = new Map<string, TreeSource>();
-  for (const r of rows) nodes.set(r.id, { id: r.id, label: r.name || 'Vacant', sublabel: r.title, kind: !r.name ? 'vacant' : r.assistant ? 'assistant' : undefined, children: [] });
+  for (const r of rows) nodes.set(r.id, { id: r.id, label: r.name || 'Vacant', sublabel: r.title, photo: r.photo, kind: !r.name ? 'vacant' : r.assistant ? 'assistant' : undefined, children: [] });
   const roots: TreeSource[] = [];
   for (const r of rows) {
     const me = nodes.get(r.id)!;
@@ -151,6 +155,7 @@ export function parseOrgCsv(text: string): OrgRow[] {
   const id = col('id', 'employee id', 'employeeid');
   const name = col('name', 'employee', 'full name');
   const title = col('title', 'job title', 'position', 'role');
+  const pho = col('photo', 'picture', 'image', 'photo url');
   const typ = col('type', 'position type', 'assistant');
   const dot = col('dotted', 'dotted line', 'dotted manager', 'dotted line manager');
   const mgr = col('manager', 'manager id', 'managerid', 'reports to', 'supervisor', 'parent');
@@ -161,6 +166,7 @@ export function parseOrgCsv(text: string): OrgRow[] {
     title: title >= 0 ? r[title]?.trim() || undefined : undefined,
     manager: mgr >= 0 ? r[mgr]?.trim() || undefined : undefined,
     assistant: typ >= 0 ? /^(assistant|asst|y|yes|true|1)$/i.test(r[typ]?.trim() ?? '') : undefined,
+    photo: pho >= 0 ? r[pho]?.trim() || undefined : undefined,
     dotted: dot >= 0 ? r[dot]?.trim() || undefined : undefined,
   }));
 }
