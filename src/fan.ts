@@ -1,12 +1,13 @@
 import { lifeSpan, type GedcomData } from './gedcom';
 import { esc, trim } from './render';
+import { parentFamily } from './layout';
 
 const RING = 90;
 const CORE = 70;
 const MARGIN = 16;
 
 // Fan chart: person at the centre of a half circle, one ring per generation, father's side on the left.
-export function fanChartSvg(g: GedcomData, rootId: string, generations = 5): string {
+export function fanChartSvg(g: GedcomData, rootId: string, generations = 5, pref: 'birth' | 'adoptive' = 'birth'): string {
   const root = g.people.get(rootId);
   if (!root) throw new Error(`Unknown person ${rootId}`);
   const rings = Math.min(Math.max(generations, 1), 9) - 1;
@@ -39,7 +40,7 @@ export function fanChartSvg(g: GedcomData, rootId: string, generations = 5): str
         `</text></g>`,
     );
     if (ring >= rings) return;
-    const fam = g.families.get(p.famc[0] ?? '');
+    const fam = parentFamily(g, p, pref);
     if (fam?.husband && g.people.has(fam.husband)) place(fam.husband, ring + 1, slot * 2);
     if (fam?.wife && g.people.has(fam.wife)) place(fam.wife, ring + 1, slot * 2 + 1);
   };
@@ -49,7 +50,7 @@ export function fanChartSvg(g: GedcomData, rootId: string, generations = 5): str
       `<text x="${cx}" y="${cy - 26}" text-anchor="middle" font-family="sans-serif" font-size="12" font-weight="600" fill="#111827">${esc(trim(root.name, 14))}</text>` +
       `<text x="${cx}" y="${cy - 10}" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#4b5563">${esc(lifeSpan(root))}</text></g>`,
   );
-  const fam = g.families.get(root.famc[0] ?? '');
+  const fam = parentFamily(g, root, pref);
   if (rings >= 1) {
     if (fam?.husband && g.people.has(fam.husband)) place(fam.husband, 1, 0);
     if (fam?.wife && g.people.has(fam.wife)) place(fam.wife, 1, 1);

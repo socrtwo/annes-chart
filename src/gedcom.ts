@@ -13,6 +13,22 @@ export interface GedEvent {
   place?: string;
 }
 
+export type Where = 'INDI' | 'BIRT' | 'DEAT' | 'MARR';
+
+export interface Citation {
+  source: string;
+  page?: string;
+  where: Where;
+}
+
+export interface Source {
+  id: string;
+  title: string;
+  author?: string;
+}
+
+export type Pedigree = 'birth' | 'adopted' | 'foster' | 'sealing' | 'other';
+
 export interface Person {
   id: string;
   name: string;
@@ -23,6 +39,9 @@ export interface Person {
   death?: GedEvent;
   famc: string[];
   fams: string[];
+  /** How the person is linked to each parent family; a missing entry means birth. */
+  pedigree?: Record<string, Pedigree>;
+  citations?: Citation[];
 }
 
 export interface Family {
@@ -32,11 +51,13 @@ export interface Family {
   children: string[];
   marriage?: GedEvent;
   divorced: boolean;
+  citations?: Citation[];
 }
 
 export interface GedcomData {
   people: Map<string, Person>;
   families: Map<string, Family>;
+  sources: Map<string, Source>;
   warnings: string[];
 }
 
@@ -89,10 +110,26 @@ function event(l: GedLine, tag: string): GedEvent | undefined {
   return { date: child(e, 'DATE')?.value.trim() || undefined, place: child(e, 'PLAC')?.value.trim() || undefined };
 }
 
+function pedigreeOf(v: string | undefined): Pedigree {
+  const t = (v ?? '').trim().toLowerCase();
+  return t === 'adopted' || t === 'foster' || t === 'sealing' ? t : t && t !== 'birth' ? 'other' : 'birth';
+}
+
 function splitName(raw: string): { given: string; surname: string } {
   const m = /^([^/]*)\/([^/]*)\/?\s*(.*)$/.exec(raw);
   if (!m) return { given: raw.trim(), surname: '' };
   return { given: `${m[1].trim()} ${m[3].trim()}`.trim(), surname: m[2].trim() };
+}
+
+function pedigrees(indi: GedLine): Record<string, Pedigree> {
+  const out: Record<string, Pedigree> = {};
+  for (const f of all(indi, 'FAMC')) out[f.value.trim()] = pedigreeOf(child(f, 'PEDI')?.value);
+  // An ADOP event can also name the adopting family.
+  for (const a of all(indi, 'ADOP')) {
+    const f = child(a, 'FAMC');
+    if (f) out[f.value.trim()] = 'adopted';
+  }
+  return out;
 }
 
 export function parseGedcom(input: string | Uint8Array): GedcomData {
@@ -101,6 +138,26 @@ export function parseGedcom(input: string | Uint8Array): GedcomData {
   const roots = parseLines(text, warnings);
   const people = new Map<string, Person>();
   const families = new Map<string, Family>();
+  const sources = new Map<string, Source>();
+  let inline = 0;
+
+  for (const r of roots) {
+    if (r.xref && r.tag === 'SOUR') {
+      sources.set(r.xref, { id: r.xref, title: child(r, 'TITL')?.value.trim() || r.xref, author: child(r, 'AUTH')?.value.trim() || undefined });
+    }
+  }
+
+  // Citations may point at a SOUR record or hold the source text inline.
+  const cites = (l: GedLine | undefined, where: Where): Citation[] =>
+    (l ? all(l, 'SOUR') : []).map((c) => {
+      const v = c.value.trim();
+      let id = v;
+      if (!/^@[^@]+@$/.test(v)) {
+        id = `inline:${++inline}`;
+        sources.set(id, { id, title: v || 'Unnamed source' });
+      } else if (!sources.has(v)) warnings.push(`Citation points at missing source ${v}`);
+      return { source: id, page: child(c, 'PAGE')?.value.trim() || undefined, where };
+    });
 
   for (const r of roots) {
     if (!r.xref) continue;
@@ -120,6 +177,8 @@ export function parseGedcom(input: string | Uint8Array): GedcomData {
         death: event(r, 'DEAT') ?? event(r, 'BURI'),
         famc: all(r, 'FAMC').map((x) => x.value.trim()),
         fams: all(r, 'FAMS').map((x) => x.value.trim()),
+        pedigree: pedigrees(r),
+        citations: [...cites(r, 'INDI'), ...cites(n, 'INDI'), ...cites(child(r, 'BIRT') ?? child(r, 'CHR'), 'BIRT'), ...cites(child(r, 'DEAT') ?? child(r, 'BURI'), 'DEAT')],
       });
     } else if (r.tag === 'FAM') {
       families.set(r.xref, {
@@ -129,6 +188,7 @@ export function parseGedcom(input: string | Uint8Array): GedcomData {
         children: all(r, 'CHIL').map((x) => x.value.trim()),
         marriage: event(r, 'MARR'),
         divorced: !!child(r, 'DIV'),
+        citations: [...cites(r, 'INDI'), ...cites(child(r, 'MARR'), 'MARR')],
       });
     }
   }
@@ -147,7 +207,7 @@ export function parseGedcom(input: string | Uint8Array): GedcomData {
       else if (!p.fams.includes(f.id)) p.fams.push(f.id);
     }
   }
-  return { people, families, warnings };
+  return { people, families, sources, warnings };
 }
 
 export function lifeSpan(p: Person): string {

@@ -1,4 +1,4 @@
-import { lifeSpan, type GedcomData } from './gedcom';
+import { lifeSpan, type GedcomData, type Person } from './gedcom';
 
 export interface TreeSource {
   id: string;
@@ -167,19 +167,32 @@ export function parseOrgCsv(text: string): OrgRow[] {
 
 export type GenealogyKind = 'descendants' | 'ancestors' | 'hourglass' | 'bowtie';
 
-function personNode(g: GedcomData, id: string): TreeSource {
+export interface GenealogyOptions extends LayoutOptions {
+  /** Which parents to follow upward: birth parents (default) or adoptive/foster parents when there are any. */
+  parents?: 'birth' | 'adoptive';
+}
+
+export function parentFamily(g: GedcomData, p: Person, pref: 'birth' | 'adoptive' = 'birth') {
+  const isBirth = (f: string) => (p.pedigree?.[f] ?? 'birth') === 'birth';
+  const ids = p.famc.filter((f) => g.families.has(f));
+  const pick = pref === 'adoptive' ? (ids.find((f) => !isBirth(f)) ?? ids[0]) : (ids.find(isBirth) ?? ids[0]);
+  return pick ? g.families.get(pick) : undefined;
+}
+
+function personNode(g: GedcomData, id: string, note?: string): TreeSource {
   const p = g.people.get(id)!;
-  return { id, label: p.name, sublabel: lifeSpan(p), kind: p.sex === 'M' ? 'male' : p.sex === 'F' ? 'female' : 'unknown', children: [] };
+  const parts = [lifeSpan(p), note, p.citations?.length ? `${p.citations.length} src` : ''].filter(Boolean);
+  return { id, label: p.name, sublabel: parts.join(' · '), kind: p.sex === 'M' ? 'male' : p.sex === 'F' ? 'female' : 'unknown', children: [] };
 }
 
 // Pedigree: the person at the root, parents as its children, up to `generations`.
-export function ancestorTree(g: GedcomData, id: string, generations = 5, seen = new Set<string>()): TreeSource {
+export function ancestorTree(g: GedcomData, id: string, generations = 5, seen = new Set<string>(), pref: 'birth' | 'adoptive' = 'birth'): TreeSource {
   const node = personNode(g, id);
   seen.add(id);
   if (generations <= 1) return node;
-  const fam = g.families.get(g.people.get(id)!.famc[0] ?? '');
+  const fam = parentFamily(g, g.people.get(id)!, pref);
   for (const pid of [fam?.husband, fam?.wife]) {
-    if (pid && g.people.has(pid) && !seen.has(pid)) node.children.push(ancestorTree(g, pid, generations - 1, seen));
+    if (pid && g.people.has(pid) && !seen.has(pid)) node.children.push(ancestorTree(g, pid, generations - 1, seen, pref));
   }
   return node;
 }
@@ -189,32 +202,40 @@ export function descendantTree(g: GedcomData, id: string, generations = 5, seen 
   const node = personNode(g, id);
   seen.add(id);
   if (generations <= 1) return node;
-  for (const fid of g.people.get(id)!.fams) {
+  const marriageYear = (fid: string) => Number(/\d{3,4}/.exec(g.families.get(fid)?.marriage?.date ?? '')?.[0] ?? Infinity);
+  // Multiple marriages appear in date order; marriages without a date keep their file order at the end.
+  const fams = g.people.get(id)!.fams.map((f, i) => ({ f, i })).sort((a, b) => marriageYear(a.f) - marriageYear(b.f) || a.i - b.i).map((x) => x.f);
+  for (const fid of fams) {
     const fam = g.families.get(fid);
     if (!fam) continue;
     const spouseId = fam.husband === id ? fam.wife : fam.husband;
     const marriage: TreeSource = {
       id: `${id}+${fid}`,
       label: spouseId && g.people.has(spouseId) ? `⚭ ${g.people.get(spouseId)!.name}` : '⚭ Unknown partner',
-      sublabel: fam.marriage?.date ?? (fam.divorced ? 'divorced' : ''),
+      sublabel: [fam.marriage?.date ? `m. ${fam.marriage.date}` : '', fam.divorced ? 'divorced' : ''].filter(Boolean).join(' · '),
       kind: 'family',
       children: [],
     };
     for (const cid of fam.children) {
-      if (g.people.has(cid) && !seen.has(cid)) marriage.children.push(descendantTree(g, cid, generations - 1, seen));
+      if (!g.people.has(cid) || seen.has(cid)) continue;
+      const kid = descendantTree(g, cid, generations - 1, seen);
+      const ped = g.people.get(cid)!.pedigree?.[fid];
+      if (ped && ped !== 'birth') kid.sublabel = [kid.sublabel, ped].filter(Boolean).join(' · ');
+      marriage.children.push(kid);
     }
     node.children.push(marriage);
   }
   return node;
 }
 
-export function genealogyChart(g: GedcomData, kind: GenealogyKind, rootId: string, generations: number, opts: LayoutOptions = {}): Chart {
+export function genealogyChart(g: GedcomData, kind: GenealogyKind, rootId: string, generations: number, opts: GenealogyOptions = {}): Chart {
+  const pref = opts.parents ?? 'birth';
   if (!g.people.has(rootId)) throw new Error(`Unknown person ${rootId}`);
-  if (kind === 'ancestors') return layoutTree(ancestorTree(g, rootId, generations), { orientation: 'right-left', ...opts });
+  if (kind === 'ancestors') return layoutTree(ancestorTree(g, rootId, generations, new Set(), pref), { orientation: 'right-left', ...opts });
   if (kind === 'descendants') return layoutTree(descendantTree(g, rootId, generations), opts);
-  if (kind === 'bowtie') return bowtieChart(g, rootId, generations, opts);
+  if (kind === 'bowtie') return bowtieChart(g, rootId, generations, opts, pref);
   // Hourglass: ancestors above, descendants below, joined at the root box.
-  const up = layoutTree(ancestorTree(g, rootId, generations), { ...opts, orientation: 'bottom-up' });
+  const up = layoutTree(ancestorTree(g, rootId, generations, new Set(), pref), { ...opts, orientation: 'bottom-up' });
   const down = layoutTree(descendantTree(g, rootId, generations), { ...opts, orientation: 'top-down' });
   const rootUp = up.boxes.find((b) => b.id === rootId)!;
   const rootDown = down.boxes.find((b) => b.id === rootId)!;
@@ -237,10 +258,10 @@ export function genealogyChart(g: GedcomData, kind: GenealogyKind, rootId: strin
 }
 
 // Bowtie: the person in the middle, father's ancestors extending left, mother's extending right.
-function bowtieChart(g: GedcomData, rootId: string, generations: number, opts: LayoutOptions): Chart {
+function bowtieChart(g: GedcomData, rootId: string, generations: number, opts: LayoutOptions, pref: 'birth' | 'adoptive' = 'birth'): Chart {
   const { boxW = 160, boxH = 56, gapY = 48 } = opts;
   const me = personNode(g, rootId);
-  const fam = g.families.get(g.people.get(rootId)!.famc[0] ?? '');
+  const fam = parentFamily(g, g.people.get(rootId)!, pref);
   const boxes: Box[] = [{ id: rootId, label: me.label, sublabel: me.sublabel, kind: me.kind, x: 0, y: 0, w: boxW, h: boxH }];
   const links: Link[] = [];
   const sides: [string | undefined, Orientation, string][] = [
@@ -249,7 +270,7 @@ function bowtieChart(g: GedcomData, rootId: string, generations: number, opts: L
   ];
   for (const [pid, orientation, prefix] of sides) {
     if (!pid || !g.people.has(pid) || generations < 2) continue;
-    const side = layoutTree(ancestorTree(g, pid, generations - 1), { ...opts, orientation });
+    const side = layoutTree(ancestorTree(g, pid, generations - 1, new Set(), pref), { ...opts, orientation });
     const top = side.boxes.find((b) => b.id === pid)!;
     const dx = orientation === 'right-left' ? -gapY - boxW - top.x : boxW + gapY - top.x;
     for (const b of side.boxes) boxes.push({ ...b, id: prefix + b.id, x: b.x + dx, y: b.y - top.y }); // roots line up with the person

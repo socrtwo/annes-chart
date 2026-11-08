@@ -16,7 +16,7 @@ export function isLiving(p: Person, now = new Date().getFullYear(), maxAge = 110
 export function redactLiving(g: GedcomData, now?: number): GedcomData {
   const people = new Map<string, Person>();
   for (const [id, p] of g.people) {
-    people.set(id, isLiving(p, now) ? { ...p, name: 'Living', given: 'Living', surname: '', birth: undefined, death: undefined } : p);
+    people.set(id, isLiving(p, now) ? { ...p, name: 'Living', given: 'Living', surname: '', birth: undefined, death: undefined, citations: [] } : p);
   }
-  return { people, families: g.families, warnings: g.warnings };
+  return { people, families: g.families, sources: g.sources, warnings: g.warnings };
 }
