@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { deflateRawSync } from 'node:zlib';
 import { parseOrgCsv } from '../src/layout';
-import { readXlsx, rowsToCsv } from '../src/xlsx';
+import { openZip, readXlsx, rowsToCsv } from '../src/xlsx';
 
 function zip(entries: Record<string, string>, deflate: boolean): Uint8Array {
   const enc = new TextEncoder();
@@ -61,5 +61,51 @@ describe('xlsx', () => {
   }
   it('rejects non-zip input', async () => {
     await expect(readXlsx(new Uint8Array(40))).rejects.toThrow(/zip/);
+  });
+
+  const sheet = (text: string) => `<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>${text}</t></is></c></row></sheetData></worksheet>`;
+
+  it('reads the first tab of the workbook, not the lowest-numbered sheet file', async () => {
+    const rows = await readXlsx(
+      zip(
+        {
+          'xl/workbook.xml': '<workbook xmlns:r="x"><sheets><sheet name="Org" sheetId="2" r:id="rId7"/><sheet name="Old" sheetId="1" r:id="rId3"/></sheets></workbook>',
+          'xl/_rels/workbook.xml.rels': '<Relationships><Relationship Id="rId3" Type="t" Target="worksheets/sheet1.xml"/><Relationship Id="rId7" Type="t" Target="worksheets/sheet2.xml"/></Relationships>',
+          'xl/worksheets/sheet1.xml': sheet('second tab'),
+          'xl/worksheets/sheet2.xml': sheet('first tab'),
+        },
+        true,
+      ),
+    );
+    expect(rows).toEqual([['first tab']]);
+  });
+
+  it('ignores phonetic runs, reads empty and prefixed elements, and decodes _x000D_', async () => {
+    const rows = await readXlsx(
+      zip(
+        {
+          'xl/sharedStrings.xml':
+            '<x:sst xmlns:x="m"><x:si><x:t>東京</x:t><x:rPh sb="0" eb="2"><x:t>トウキョウ</x:t></x:rPh><x:phoneticPr fontId="1"/></x:si>' +
+            '<x:si/><x:si><x:t xml:space="preserve"/></x:si><x:si><x:t>a_x000D_\nb</x:t></x:si></x:sst>',
+          'xl/worksheets/sheet1.xml':
+            '<x:worksheet xmlns:x="m"><x:sheetData><x:row r="1"><x:c r="A1" t="s"><x:v>0</x:v></x:c><x:c r="B1" t="s"><x:v>1</x:v></x:c>' +
+            '<x:c r="C1" t="s"><x:v>2</x:v></x:c><x:c r="D1" t="s"><x:v>3</x:v></x:c></x:row></x:sheetData></x:worksheet>',
+        },
+        false,
+      ),
+    );
+    expect(rows).toEqual([['東京', '', '', 'a\r\nb']]);
+  });
+
+  it('inflates an entry only when it is asked for', async () => {
+    const entries = openZip(zip({ 'a.txt': 'hello', 'b.bin': 'x' }, true));
+    expect([...entries.keys()]).toEqual(['a.txt', 'b.bin']);
+    expect(new TextDecoder().decode(await entries.get('a.txt')!())).toBe('hello');
+  });
+
+  it('reports a damaged directory as a corrupt file', async () => {
+    const bytes = zip(files, false);
+    new DataView(bytes.buffer).setUint32(bytes.length - 6, 0xfffffff0, true); // directory offset
+    await expect(readXlsx(bytes)).rejects.toThrow(/Corrupt \.xlsx/);
   });
 });

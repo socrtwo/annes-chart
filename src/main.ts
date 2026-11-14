@@ -1,104 +1,135 @@
-import { parseGedcom, type GedcomData } from './gedcom';
-import { genealogyChart, parseOrgCsv, type GenealogyKind } from './layout';
-import { renderSvg } from './render';
-import { readXlsx, rowsToCsv } from './xlsx';
+import { clampGenerations, createApp, draw, exportGedcom, openDocument, personOptions, type AppState, type ChartKind, type Drawing } from './app';
+import type { GedcomExportMode } from './gedcom-export';
+import type { OrgStyle } from './org';
 import { svgToPng } from './raster';
-import { redactLiving } from './privacy';
-import { orgChart, type OrgStyle } from './org';
-import { fanChartSvg } from './fan';
-import { writeGedcom } from './gedcom-export';
 import sampleGed from '../samples/family.ged?raw';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-let ged: GedcomData | undefined;
+const kind = $<HTMLSelectElement>('kind');
+const person = $<HTMLSelectElement>('person');
+const find = $<HTMLInputElement>('find');
+const gens = $<HTMLInputElement>('gens');
+const hideLiving = $<HTMLInputElement>('hideliving');
+const orgStyle = $<HTMLSelectElement>('orgstyle');
+const rollup = $<HTMLInputElement>('rollup');
+
+const bus = createApp();
 let svg = '';
-let orgRows: ReturnType<typeof parseOrgCsv> | undefined;
+let listedFor: unknown; // what the person list was last built from
 
-function drawOrg() {
-  if (!orgRows) return;
-  svg = renderSvg(orgChart(orgRows, $<HTMLSelectElement>('orgstyle').value as OrgStyle, {}, $<HTMLInputElement>('rollup').checked));
+const say = (text: string) => ($('msg').textContent = text);
+const fail = (err: unknown) => say(String(err instanceof Error ? err.message : err));
+
+function fillPeople(state: AppState) {
+  const key = `${find.value}\u0000${state.hideLiving}\u0000${find.value ? state.person : ''}`; // a filtered list always keeps the current person
+  if (listedFor === state.doc && person.dataset.key === key) return;
+  listedFor = state.doc;
+  person.dataset.key = key;
+  const words = find.value.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = personOptions(state).filter((o) => o.id === state.person || words.every((w) => o.label.toLowerCase().includes(w)));
+  person.replaceChildren(...shown.map((o) => Object.assign(document.createElement('option'), { value: o.id, textContent: o.label })));
+}
+
+function render(state: AppState) {
+  document.body.dataset.mode = state.doc?.type ?? 'none';
+  kind.value = state.kind;
+  gens.value = String(state.generations);
+  hideLiving.checked = state.hideLiving;
+  orgStyle.value = state.orgStyle;
+  rollup.checked = state.rollup;
+  fillPeople(state);
+  person.value = state.person;
+  $<HTMLButtonElement>('undo').disabled = !bus.canUndo;
+  $<HTMLButtonElement>('redo').disabled = !bus.canRedo;
+
+  let out: Drawing;
+  try {
+    out = draw(state);
+  } catch (err) {
+    out = { svg: '', note: String(err instanceof Error ? err.message : err), warnings: [] };
+  }
+  svg = out.svg;
   $('stage').innerHTML = svg;
+  say(out.note);
+  const warn = $<HTMLDetailsElement>('warn');
+  warn.hidden = !out.warnings.length;
+  warn.querySelector('summary')!.textContent = `${out.warnings.length} warning${out.warnings.length === 1 ? '' : 's'}`;
+  warn.querySelector('ul')!.replaceChildren(...out.warnings.map((w) => Object.assign(document.createElement('li'), { textContent: w })));
 }
 
-function show(markup: string, note: string) {
-  svg = markup;
-  $('stage').innerHTML = markup;
-  $('msg').textContent = note;
-}
-
-const view = () => (ged && $<HTMLInputElement>('hideliving').checked ? redactLiving(ged) : ged!);
-
-function drawGenealogy() {
-  if (!ged || !$<HTMLSelectElement>('person').value) return;
-  const data = view();
-  for (const o of $<HTMLSelectElement>('person').options) o.textContent = data.people.get(o.value)?.name ?? o.value;
-  const kind = $<HTMLSelectElement>('kind').value;
-  const person = $<HTMLSelectElement>('person').value;
-  const gens = Number($<HTMLInputElement>('gens').value) || 5;
-  const markup = kind === 'fan' ? fanChartSvg(data, person, gens) : renderSvg(genealogyChart(data, kind as GenealogyKind, person, gens));
-  show(markup, `${ged.people.size} people, ${ged.families.size} families${ged.warnings.length ? `, ${ged.warnings.length} warnings` : ''}`);
-}
-
-function loadGedcom(bytes: Uint8Array) {
-  orgRows = undefined;
-  ged = parseGedcom(bytes);
-  const sel = $<HTMLSelectElement>('person');
-  sel.replaceChildren(
-    ...[...ged.people.values()].map((p) => Object.assign(document.createElement('option'), { value: p.id, textContent: p.name })),
-  );
-  drawGenealogy();
-}
-
-function download(text: string, type: string, name: string) {
-  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([text], { type })), download: name });
+function download(data: Blob, name: string) {
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(data), download: name });
   a.click();
-  URL.revokeObjectURL(a.href);
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000); // some browsers start the download after click() returns
 }
 
-$('sample').addEventListener('click', () => loadGedcom(new TextEncoder().encode(sampleGed)));
+async function open(name: string, bytes: Uint8Array) {
+  try {
+    bus.execute('doc.open', await openDocument(name, bytes));
+  } catch (err) {
+    fail(err); // the chart on screen and its data stay as they were
+  }
+}
 
-$('saveged').addEventListener('click', () => {
-  if (ged) download(writeGedcom(view()), 'text/plain', 'family.ged');
-});
+bus.subscribe(render);
+render(bus.state);
+
+$('sample').addEventListener('click', () => open('family.ged', new TextEncoder().encode(sampleGed)));
 
 $<HTMLInputElement>('file').addEventListener('change', async (e) => {
-  const file = (e.target as HTMLInputElement).files?.[0];
-  if (!file) return;
-  try {
-    if (/\.(csv|xlsx)$/i.test(file.name)) {
-      ged = undefined;
-      const text = /\.xlsx$/i.test(file.name) ? rowsToCsv(await readXlsx(new Uint8Array(await file.arrayBuffer()))) : await file.text();
-      const rows = parseOrgCsv(text);
-      orgRows = rows;
-      drawOrg();
-      show(svg, `${rows.length} people in the org chart`);
-      return;
-    }
-    loadGedcom(new Uint8Array(await file.arrayBuffer()));
-  } catch (err) {
-    $('msg').textContent = String(err instanceof Error ? err.message : err);
-  }
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (file) await open(file.name, new Uint8Array(await file.arrayBuffer()));
+  input.value = ''; // so that choosing the same file again is still a change
 });
 
-for (const id of ['orgstyle', 'rollup']) $(id).addEventListener('change', drawOrg);
-for (const id of ['kind', 'person', 'gens', 'hideliving']) $(id).addEventListener('change', drawGenealogy);
+kind.addEventListener('change', () => bus.execute('view.set', { kind: kind.value as ChartKind }));
+person.addEventListener('change', () => bus.execute('view.set', { person: person.value }));
+gens.addEventListener('change', () => {
+  bus.execute('view.set', { generations: clampGenerations(gens.value) });
+  gens.value = String(bus.state.generations);
+});
+hideLiving.addEventListener('change', () => bus.execute('view.set', { hideLiving: hideLiving.checked }));
+orgStyle.addEventListener('change', () => bus.execute('view.set', { orgStyle: orgStyle.value as OrgStyle }));
+rollup.addEventListener('change', () => bus.execute('view.set', { rollup: rollup.checked }));
+find.addEventListener('input', () => {
+  fillPeople(bus.state);
+  person.value = bus.state.person;
+});
+
+$('undo').addEventListener('click', () => bus.undo());
+$('redo').addEventListener('click', () => bus.redo());
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  if (e.target instanceof HTMLInputElement && /^(text|search|number)$/.test(e.target.type)) return; // leave typing undo alone
+  const key = e.key.toLowerCase();
+  if (key === 'z' && !e.shiftKey) bus.undo();
+  else if (key === 'y' || (key === 'z' && e.shiftKey)) bus.redo();
+  else return;
+  e.preventDefault();
+});
 
 $('save').addEventListener('click', () => {
-  if (svg) download(svg, 'image/svg+xml', 'chart.svg');
+  if (svg) download(new Blob([svg], { type: 'image/svg+xml' }), 'chart.svg');
 });
 
 $('savepng').addEventListener('click', async () => {
   if (!svg) return;
   try {
-    const blob = await svgToPng(svg);
-    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'chart.png' });
-    a.click();
-    URL.revokeObjectURL(a.href);
+    download(await svgToPng(svg), 'chart.png');
   } catch (err) {
-    $('msg').textContent = String(err instanceof Error ? err.message : err);
+    fail(err);
   }
 });
 
 $('print').addEventListener('click', () => {
   if (svg) window.print();
+});
+
+$('saveged').addEventListener('click', () => {
+  const mode = $<HTMLSelectElement>('gedmode').value as GedcomExportMode;
+  const out = exportGedcom(bus.state, mode);
+  if (!out) return;
+  download(new Blob([out.text], { type: 'text/plain' }), out.name);
+  say(out.note);
 });

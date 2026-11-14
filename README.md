@@ -6,10 +6,13 @@ An original, open-source diagramming app in the tradition of Microsoft Visio, wi
 
 > **Status: 0.1.0, foundation.** What works today:
 >
-> - **GEDCOM import** (5.5, 5.5.1, 7.0; UTF-8, UTF-16, BOM, Latin-1 fallback): people, names, sex, birth and death, families, marriages and divorces. Bad lines become warnings, one-sided family links are repaired.
-> - **Genealogy charts:** descendants (with marriages), ancestors (pedigree) and hourglass, from any person, with a generation limit.
-> - **Org charts from CSV** (ID, Name, Title, Manager); multiple roots and cycles are handled.
-> - **Tidy tree layout** in four orientations, and **SVG export**.
+> - **GEDCOM import** (5.5, 5.5.1, 7.0; UTF-8, UTF-16, ANSEL, Windows-1252): people, names and suffixes, sex, birth, baptism, death, burial, families, marriages and divorces. Bad lines become warnings you can read in the app; links recorded on only one side are repaired in both directions.
+> - **GEDCOM export**, two ways: **complete** writes back every record and tag of the file you opened (notes, sources, media, other events, custom tags); **basic** writes only the core facts the charts use, as plain GEDCOM 5.5.1.
+> - **Genealogy charts:** descendants (with marriages), ancestors (pedigree), hourglass, bowtie and fan, from any person, with a generation limit. An ancestor reached by two lines is drawn on both.
+> - **Privacy filter:** living people appear as "Living" with no dates or places, their marriages are hidden too, and the filter also applies to GEDCOM export. People without dates are dated from their relatives.
+> - **Org charts from CSV or XLSX** (ID, Name, Title, Manager, Dotted line, Type): standard, hanging and horizontal styles, assistants, vacancies, dotted-line managers and roll-up counts. Managers may be given by ID or by name; comma, semicolon and tab delimiters are read; duplicate IDs, unknown managers and reporting loops are drawn and reported as warnings.
+> - **Output:** SVG, PNG and print / PDF (the whole chart scaled to the page width; multi-page posters are still to come).
+> - **Undo and redo** of everything you change, through the command registry.
 >
 > Everything else is the plan: see [docs/COMMANDS-PLAN.md](docs/COMMANDS-PLAN.md) and [docs/ROADMAP.md](docs/ROADMAP.md). Issues and discussion are welcome.
 

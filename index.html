@@ -8,20 +8,33 @@
       body { margin: 0; font-family: system-ui, sans-serif; display: flex; flex-direction: column; height: 100vh; }
       header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; background: #1f2937; color: #fff; }
       header label { display: flex; gap: 4px; align-items: center; font-size: 13px; }
+      #person { max-width: 22em; }
       #stage { flex: 1; overflow: auto; background: #f9fafb; padding: 12px; }
       #msg { font-size: 12px; opacity: 0.85; }
+      #warn { font-size: 12px; padding: 4px 12px; background: #fef3c7; max-height: 30vh; overflow: auto; }
+      #warn ul { margin: 4px 0; }
+      /* Controls marked data-for show only for that kind of document ("any": once something is open). */
+      body[data-mode="none"] [data-for],
+      body[data-mode="org"] [data-for="family"],
+      body[data-mode="family"] [data-for="org"] { display: none; }
+      @media print {
+        @page { margin: 10mm; }
+        header, #warn { display: none; }
+        /* Let the whole chart reach the page, scaled to its width, instead of one screenful. */
+        body { display: block; height: auto; }
+        #stage { overflow: visible; padding: 0; background: none; }
+        #stage svg { display: block; max-width: 100%; height: auto; }
+      }
     </style>
-    <style>
-    @media print {
-      header { display: none; }
-    }
-  </style>
   </head>
-  <body>
+  <body data-mode="none">
     <header>
       <strong>Anne's Chart</strong>
-      <label>Open <input id="file" type="file" accept=".ged,.gedcom,.csv,.xlsx" /></label>
-      <label>Chart
+      <label>Open <input id="file" type="file" accept=".ged,.gedcom,.csv,.tsv,.xlsx" /></label>
+      <button id="sample" type="button">Load sample</button>
+      <button id="undo" type="button" data-for="any" title="Undo (Ctrl+Z)">Undo</button>
+      <button id="redo" type="button" data-for="any" title="Redo (Ctrl+Y)">Redo</button>
+      <label data-for="family">Chart
         <select id="kind">
           <option value="descendants">Descendants</option>
           <option value="ancestors">Ancestors (pedigree)</option>
@@ -30,24 +43,33 @@
           <option value="fan">Fan (ancestors)</option>
         </select>
       </label>
-      <label>Org style
+      <label data-for="family">Person
+        <input id="find" type="search" placeholder="Find…" style="width: 7em" />
+        <select id="person"></select>
+      </label>
+      <label data-for="family">Generations <input id="gens" type="number" min="1" max="20" step="1" value="5" style="width: 3em" /></label>
+      <label data-for="family"><input id="hideliving" type="checkbox" /> Hide living people</label>
+      <label data-for="org">Org style
         <select id="orgstyle">
           <option value="standard">Standard</option>
           <option value="hanging">Hanging</option>
           <option value="horizontal">Horizontal</option>
         </select>
       </label>
-      <label><input id="rollup" type="checkbox" /> Roll-up counts</label>
-      <label><input id="hideliving" type="checkbox" /> Hide living people</label>
-      <label>Person <select id="person"></select></label>
-      <label>Generations <input id="gens" type="number" min="1" max="20" value="5" style="width: 3em" /></label>
-      <button id="sample">Load sample</button>
-      <button id="save">Save SVG</button>
-      <button id="savepng">Save PNG</button>
-      <button id="print">Print / PDF</button>
-      <button id="saveged">Save GEDCOM</button>
-      <span id="msg">Open a GEDCOM (.ged) file or an org chart CSV or XLSX (ID, Name, Title, Manager).</span>
+      <label data-for="org"><input id="rollup" type="checkbox" /> Roll-up counts</label>
+      <button id="save" type="button" data-for="any">Save SVG</button>
+      <button id="savepng" type="button" data-for="any">Save PNG</button>
+      <button id="print" type="button" data-for="any">Print / PDF</button>
+      <label data-for="family">GEDCOM export
+        <select id="gedmode">
+          <option value="full" title="Writes back every record and tag of the file you opened: notes, sources, media, all events.">Complete (keep everything)</option>
+          <option value="basic" title="Writes only names, sex, birth, baptism, death, burial, marriages and family links. Everything else is left out.">Basic (core facts only)</option>
+        </select>
+        <button id="saveged" type="button">Save GEDCOM</button>
+      </label>
+      <span id="msg"></span>
     </header>
+    <details id="warn" hidden><summary></summary><ul></ul></details>
     <div id="stage"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

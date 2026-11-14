@@ -1,4 +1,4 @@
-import { layoutTree, orgToTree, type Chart, type Link, type LayoutOptions, type OrgRow, type TreeSource, type Box } from './layout';
+import { buildOrg, layoutTree, type Box, type Chart, type LayoutOptions, type Link, type OrgRow, type TreeSource } from './layout';
 
 export type OrgStyle = 'standard' | 'hanging' | 'horizontal';
 
@@ -14,7 +14,7 @@ function layoutHanging(root: TreeSource, opts: LayoutOptions = {}): Chart {
   const place = (n: TreeSource, depth: number) => {
     seen.add(n.id);
     maxDepth = Math.max(maxDepth, depth);
-    boxes.push({ id: n.id, label: n.label, sublabel: n.sublabel, kind: n.kind, x: depth * (indent + gapX / 2), y: row++ * (boxH + gapY), w: boxW, h: boxH });
+    boxes.push({ id: n.id, ref: n.ref, label: n.label, sublabel: n.sublabel, note: n.note, kind: n.kind, x: depth * (indent + gapX / 2), y: row++ * (boxH + gapY), w: boxW, h: boxH });
     for (const c of n.children) {
       if (seen.has(c.id)) continue;
       links.push({ from: n.id, to: c.id, hang: true });
@@ -25,21 +25,26 @@ function layoutHanging(root: TreeSource, opts: LayoutOptions = {}): Chart {
   return { boxes, links, width: maxDepth * (indent + gapX / 2) + boxW, height: row * (boxH + gapY) - gapY, horizontal: false };
 }
 
-// Appends the total number of people below each manager.
+// Notes the total number of positions below each manager, on a line of its own.
 function rollUp(n: TreeSource, seen = new Set<string>()): number {
   seen.add(n.id);
   let total = 0;
   for (const c of n.children) if (!seen.has(c.id)) total += 1 + rollUp(c, seen);
-  if (total) n.sublabel = `${n.sublabel ? n.sublabel + ' · ' : ''}${total} report${total === 1 ? '' : 's'}`;
+  if (total) n.note = `${total} report${total === 1 ? '' : 's'}`;
   return total;
 }
 
 export function orgChart(rows: OrgRow[], style: OrgStyle = 'standard', opts: LayoutOptions = {}, rollup = false): Chart {
-  const tree = orgToTree(rows);
-  if (rollup) rollUp(tree);
+  const org = buildOrg(rows);
+  const warnings = [...org.warnings];
+  if (rollup) rollUp(org.tree);
   const chart =
-    style === 'hanging' ? layoutHanging(tree, opts) : layoutTree(tree, { ...opts, orientation: style === 'horizontal' ? 'left-right' : 'top-down' });
-  const ids = new Set(chart.boxes.map((b) => b.id));
-  for (const r of rows) if (r.dotted && ids.has(r.dotted) && ids.has(r.id)) chart.links.push({ from: r.dotted, to: r.id, dotted: true });
-  return chart;
+    style === 'hanging' ? layoutHanging(org.tree, opts) : layoutTree(org.tree, { ...opts, orientation: style === 'horizontal' ? 'left-right' : 'top-down' });
+  rows.forEach((r, i) => {
+    if (!r.dotted) return;
+    const from = org.resolve(r.dotted);
+    if (!from) warnings.push(`"${r.name || r.id}": dotted-line manager "${r.dotted}" was not found`);
+    else if (from !== org.keys[i]) chart.links.push(style === 'hanging' ? { from, to: org.keys[i], dotted: true, side: true } : { from, to: org.keys[i], dotted: true });
+  });
+  return { ...chart, warnings };
 }

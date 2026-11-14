@@ -50,9 +50,17 @@ describe('gedcom', () => {
     expect(parseGedcom(bytes).people.get('@I1@')?.name).toBe('Joé A');
   });
   it('lays out every chart kind without overlap', () => {
-    for (const k of ['descendants', 'ancestors', 'hourglass'] as const) {
+    for (const k of ['descendants', 'ancestors', 'hourglass', 'bowtie'] as const) {
       const c = genealogyChart(g, k, k === 'descendants' ? '@I1@' : '@I3@', 4);
-      expect(c.boxes.length).toBeGreaterThan(1);
+      expect(c.boxes.length, k).toBeGreaterThan(1);
+      for (const a of c.boxes) {
+        for (const b of c.boxes) {
+          if (a === b) continue;
+          const apart = a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y;
+          expect(apart, `${k}: ${a.id} overlaps ${b.id}`).toBe(true);
+        }
+        expect(a.x >= 0 && a.y >= 0 && a.x + a.w <= c.width && a.y + a.h <= c.height, `${k}: ${a.id} inside the chart`).toBe(true);
+      }
       expect(renderSvg(c)).toContain('<svg');
     }
   });
